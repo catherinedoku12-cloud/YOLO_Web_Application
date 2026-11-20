@@ -22,7 +22,13 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 
 # Load your trained YOLO model
-model = YOLO(MODEL_PATH)
+model = None
+
+def get_model():
+    global model
+    if model is None:
+        model = YOLO(MODEL_PATH)
+    return model
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
@@ -59,6 +65,7 @@ def index():
                 error="Please upload a JPG, JPEG, PNG or WEBP image."
             )
 
+       
         try:
             original_name = secure_filename(file.filename)
             extension = original_name.rsplit(".", 1)[1].lower()
@@ -73,9 +80,13 @@ def index():
             file.save(upload_path)
 
             # Run object detection
-            predictions = model.predict(
+            yolo_model = get_model()
+
+            predictions = yolo_model.predict(
                 source=upload_path,
                 conf=0.25,
+                imgsz=416,
+                device="cpu",
                 verbose=False
             )
 
@@ -105,7 +116,7 @@ def index():
                 confidence = float(box.conf[0].item())
 
                 detections.append({
-                    "class_name": model.names[class_id],
+                    "class_name": yolo_model.names[class_id],
                     "confidence": round(confidence * 100, 2)
                 })
 
@@ -123,16 +134,15 @@ def index():
                 total=len(detections)
             )
 
-        except Exception:
+        except Exception as e:
             app.logger.exception("Detection failed")
 
             return render_template(
                 "index.html",
-                error="Something went wrong while processing the image."
+                error=f"Detection failed: {str(e)}"
             )
 
+
     return render_template("index.html")
-
-
 if __name__ == "__main__":
     app.run(debug=True)
